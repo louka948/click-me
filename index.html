@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Valentine</title>
+  <style>
+    :root{
+      --bg1:#ffe6ef;
+      --bg2:#ffd1e2;
+      --card:#ffffffcc;
+      --text:#1b1b1b;
+      --yes:#ff2f7b;
+      --no:#d9d9d9;
+      --shadow: 0 18px 50px rgba(0,0,0,.18);
+      --radius: 18px;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--font);
+      color:var(--text);
+      background: radial-gradient(1200px 800px at 20% 10%, #fff 0%, var(--bg1) 30%, var(--bg2) 100%);
+      display:grid;
+      place-items:center;
+      overflow:hidden;
+    }
+    .wrap{
+      width:min(900px, 92vw);
+      padding:24px;
+      position:relative;
+    }
+    .card{
+      background:var(--card);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,.7);
+      box-shadow:var(--shadow);
+      border-radius:var(--radius);
+      padding:30px 22px;
+      display:grid;
+      gap:18px;
+      justify-items:center;
+      position:relative;
+      overflow:hidden;
+    }
+    .logo{
+      width:92px;
+      height:92px;
+      display:grid;
+      place-items:center;
+      border-radius:999px;
+      background: #fff;
+      box-shadow: 0 10px 30px rgba(0,0,0,.10);
+      position:relative;
+    }
+    .logo svg{width:68px;height:68px}
+    h1{
+      margin:0;
+      font-size: clamp(22px, 3.5vw, 40px);
+      letter-spacing:-.02em;
+      text-align:center;
+    }
+    .name{
+      text-transform:none;
+      font-weight:800;
+    }
+    .btnrow{
+      display:flex;
+      gap:18px;
+      align-items:center;
+      justify-content:center;
+      margin-top:8px;
+      position:relative;
+      height:72px;
+      width:min(520px, 92vw);
+    }
+    button{
+      border:0;
+      border-radius:999px;
+      padding:16px 26px;
+      font-size:18px;
+      font-weight:750;
+      cursor:pointer;
+      box-shadow: 0 10px 25px rgba(0,0,0,.12);
+      transition: transform .12s ease, filter .12s ease;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:active{transform: scale(.98)}
+    .yes{
+      background:var(--yes);
+      color:white;
+      min-width:140px;
+    }
+    .yes:hover{filter: brightness(1.02)}
+    .no{
+      background:var(--no);
+      color:#2a2a2a;
+      min-width:140px;
+      position:absolute;
+      right:0;
+      transform: translateX(0);
+    }
+    .hint{
+      font-size:12px;
+      opacity:.65;
+      margin-top:-6px;
+      text-align:center;
+      min-height:16px;
+    }
+    .result{
+      display:none;
+      text-align:center;
+      gap:14px;
+      justify-items:center;
+      width:100%;
+    }
+    .yay{
+      font-size: clamp(26px, 5vw, 52px);
+      margin:0;
+      letter-spacing:-.02em;
+    }
+    .festive{
+      width:min(520px, 92vw);
+      border-radius:16px;
+      background: white;
+      box-shadow: 0 16px 45px rgba(0,0,0,.16);
+      overflow:hidden;
+      border: 1px solid rgba(0,0,0,.06);
+    }
+    .festive svg{display:block;width:100%;height:auto}
+    .footer{
+      margin-top:10px;
+      font-size:11px;
+      opacity:.55;
+      text-align:center;
+      line-height:1.35;
+    }
+    canvas.confetti{
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      z-index: 10;
+      display:none;
+    }
+  </style>
+</head>
+<body>
+  <canvas class="confetti" id="confetti"></canvas>
+
+  <main class="wrap">
+    <section class="card" id="card">
+      <div class="logo" aria-hidden="true">
+        <!-- petit chat + coeur -->
+        <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M38 34 22 22v22c0 9 7 16 16 16h2" fill="#F2B07A"/>
+          <path d="M90 34 106 22v22c0 9-7 16-16 16h-2" fill="#F2B07A"/>
+          <path d="M64 28c-22 0-40 16-40 36 0 26 22 44 40 44s40-18 40-44c0-20-18-36-40-36Z" fill="#F2B07A"/>
+          <circle cx="48" cy="66" r="6" fill="#1b1b1b"/>
+          <circle cx="80" cy="66" r="6" fill="#1b1b1b"/>
+          <path d="M64 74c-6 0-10 5-10 5s4 8 10 8 10-8 10-8-4-5-10-5Z" fill="#FF5A88"/>
+          <path d="M96 22c0 10-10 18-18 18-8 0-14-6-14-14 0-10 10-18 18-18 8 0 14 6 14 14Z" fill="#FF2F7B"/>
+          <path d="M75 24c0 5-4 9-9 9" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <h1><span class="name" id="name">Sarah</span>, veux‑tu être ma Valentine&nbsp;?</h1>
+
+      <div class="btnrow" id="btnrow">
+        <button class="yes" id="yesBtn">Oui</button>
+        <button class="no" id="noBtn" aria-label="Non">Non</button>
+      </div>
+
+      <div class="hint" id="hint">« Non » a l’air un peu timide…</div>
+
+      <div class="result" id="result">
+        <h2 class="yay">YAY&nbsp;! 🎉💘</h2>
+                <div class="festive" aria-hidden="true">
+          <div style="padding:18px 18px 0 18px; text-align:center;">
+            <div style="font-weight:900; font-size:28px; letter-spacing:-.02em;">Dieu merci</div>
+          </div>
+          <img src="photo.jpg" alt="Photo" style="width:100%; height:auto; display:block; margin-top:10px;">
+        </div>
+        <div class="footer">Aucune donnée enregistrée. Page 100% locale (HTML/CSS/JS).</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Personnalisation rapide
+    const NAME = "Sarah"; // ← change uniquement ça si besoin
+    document.getElementById("name").textContent = NAME;
+
+    const noBtn = document.getElementById("noBtn");
+    const yesBtn = document.getElementById("yesBtn");
+    const hint = document.getElementById("hint");
+    const btnrow = document.getElementById("btnrow");
+    const result = document.getElementById("result");
+
+    // "Non" qui fuit
+    function dodge(){
+      const row = btnrow.getBoundingClientRect();
+      const btn = noBtn.getBoundingClientRect();
+      const maxX = row.width - btn.width;
+      const maxY = row.height - btn.height;
+      const x = Math.max(0, Math.min(maxX, Math.random() * maxX));
+      const y = Math.max(0, Math.min(maxY, Math.random() * maxY));
+      noBtn.style.left = x + "px";
+      noBtn.style.top  = y + "px";
+      noBtn.style.right = "auto";
+      noBtn.style.position = "absolute";
+      hint.textContent = "Non tente de s’échapper…";
+    }
+    noBtn.addEventListener("mouseenter", dodge);
+    noBtn.addEventListener("touchstart", (e)=>{ e.preventDefault(); dodge(); }, {passive:false});
+    noBtn.addEventListener("click", dodge);
+
+    // Confetti canvas (sans librairie)
+    const canvas = document.getElementById("confetti");
+    const ctx = canvas.getContext("2d");
+    let W, H, pieces, anim;
+
+    function resize(){
+      W = canvas.width = window.innerWidth * devicePixelRatio;
+      H = canvas.height = window.innerHeight * devicePixelRatio;
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+    }
+
+    function makeConfetti(){
+      const colors = ["#ff2f7b","#ff6fa8","#ffd1e2","#ffffff","#ffb703","#fb8500"];
+      pieces = Array.from({length: 180}, () => ({
+        x: Math.random() * window.innerWidth,
+        y: -20 - Math.random() * window.innerHeight,
+        r: 4 + Math.random() * 6,
+        a: Math.random() * Math.PI * 2,
+        s: 1 + Math.random() * 3,
+        v: 1.5 + Math.random() * 3.5,
+        w: (Math.random() - 0.5) * 2.0,
+        c: colors[(Math.random()*colors.length)|0]
+      }));
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,window.innerWidth, window.innerHeight);
+      for(const p of pieces){
+        p.y += p.v;
+        p.x += p.w;
+        p.a += 0.08;
+        if(p.y > window.innerHeight + 30){ p.y = -20; p.x = Math.random() * window.innerWidth; }
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.a);
+        ctx.fillStyle = p.c;
+        ctx.fillRect(-p.r/2, -p.r/2, p.r*1.2, p.r);
+        ctx.restore();
+      }
+      anim = requestAnimationFrame(draw);
+    }
+
+    function startConfetti(){
+      canvas.style.display = "block";
+      // reset scale properly
+      ctx.setTransform(1,0,0,1,0,0);
+      canvas.width = window.innerWidth * devicePixelRatio;
+      canvas.height = window.innerHeight * devicePixelRatio;
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+
+      makeConfetti();
+      cancelAnimationFrame(anim);
+      draw();
+      setTimeout(()=>{ stopConfetti(); }, 4200);
+    }
+
+    function stopConfetti(){
+      cancelAnimationFrame(anim);
+      canvas.style.display = "none";
+    }
+
+    window.addEventListener("resize", ()=>{ /* on laisse simple */ });
+
+    yesBtn.addEventListener("click", ()=>{
+      btnrow.style.display = "none";
+      hint.style.display = "none";
+      result.style.display = "grid";
+      startConfetti();
+    });
+  </script>
+</body>
+</html>
