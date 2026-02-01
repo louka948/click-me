@@ -19,7 +19,7 @@
     *{ box-sizing:border-box; }
     html,body{ height:100%; overscroll-behavior:auto; }
 
-    /* Scroll limité: seulement vertical, et seulement un peu */
+    /* Scroll très léger (pour Safari bar), pas de page géante */
     body{
       margin:0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -27,17 +27,18 @@
       color:var(--text);
       overflow-x:hidden;
       overflow-y:auto;
+      -webkit-text-size-adjust: 100%;
     }
 
-    /* On garde la carte toujours visible */
+    /* UI toujours visible */
     .ui{
       position: sticky;
       top: 0;
       z-index: 20;
       display:grid;
       place-items:center;
-      padding: 18px 16px 10px;
-      pointer-events:none; /* la carte ne bloque pas la poursuite */
+      padding: 14px 16px 10px;
+      pointer-events:none;
     }
 
     .card{
@@ -49,7 +50,7 @@
       text-align:center;
       backdrop-filter: blur(6px);
       border: 1px solid rgba(255,255,255,.6);
-      pointer-events:auto; /* mais les boutons restent cliquables */
+      pointer-events:auto;
     }
 
     .icon{
@@ -101,15 +102,16 @@
       color:#fff;
     }
 
-    /* Le terrain est seulement un peu plus grand que l'écran (pas gigantesque) */
+    /* Terrain: juste un peu plus haut que l'écran (scroll léger) */
     .arena{
       position:relative;
-      width: 100vw;
-      height: 160vh;            /* scroll limité */
-      min-height: 1200px;       /* pour éviter trop petit sur grand écran */
+      width:100vw;
+      height: 130vh;     /* petit scroll */
+      min-height: 920px; /* sécurité */
+      padding-bottom: 12vh; /* marge pour UI Safari bas */
     }
 
-    /* Donuts décoratifs (fixed) */
+    /* Donuts décoratifs */
     .donut{
       position:fixed;
       width:92px;
@@ -152,10 +154,10 @@
       background-size: 220px 220px;
     }
 
-    /* Le bouton Non vit dans le document (scroll), mais dans une zone limitée */
+    /* Bouton Non: dans l'arena (coordonnées locales) */
     .no{
       position:absolute;
-      left: 56vw;
+      left: 58vw;
       top: 92vh;
       background:#ededed;
       color:#333;
@@ -220,7 +222,7 @@
         <button class="yes" id="yes">Oui</button>
       </div>
 
-      <div class="hint" id="hint">Le « Non » est en fuite.</div>
+      <div class="hint" id="hint">Le « Non » fuit ton curseur.</div>
 
       <div class="result" id="result">
         <div class="yay">VAMOOOOOOOOOS</div>
@@ -242,68 +244,66 @@
     const buttons = document.getElementById("buttons");
     const hint = document.getElementById("hint");
 
-    // ---- Course poursuite (pas de téléportation), zone limitée ----
+    // --- Pointeur EN COORDONNÉES LOCALES DE L'ARENA ---
+    const pointer = { x: 0, y: 0 };
+
+    function updatePointerLocal(e){
+      const ar = arena.getBoundingClientRect();
+      // coord "document" du coin haut-gauche de l'arena
+      const arenaDocX = ar.left + window.scrollX;
+      const arenaDocY = ar.top  + window.scrollY;
+
+      const pxDoc = e.clientX + window.scrollX;
+      const pyDoc = e.clientY + window.scrollY;
+
+      pointer.x = pxDoc - arenaDocX;
+      pointer.y = pyDoc - arenaDocY;
+    }
+
+    window.addEventListener("pointermove", updatePointerLocal, { passive:true });
+    no.addEventListener("pointerdown", (e) => { e.preventDefault(); updatePointerLocal(e); });
+    no.addEventListener("click", (e) => e.preventDefault());
+
+    // --- Physique poursuite/fuite (zéro "hasard" quand loin) ---
     let pos = { x: no.offsetLeft, y: no.offsetTop };
     let vel = { x: 0, y: 0 };
-    let pointer = { x: pos.x, y: pos.y };
     let lastT = performance.now();
 
-    // Réglages
     const margin = 14;
 
     const fleeRadius = 220;
-    const fearGain = 1.9;
-    const baseAccel = 0.36;
+
+    const baseAccel = 0.40;
+    const fearGain = 2.20;     // accélère beaucoup plus quand tu approches
     const friction = 0.90;
-    const maxSpeed = 9.0;
+    const maxSpeed = 10.0;
 
-    const minSpeed = 1.15;
-    const idleWander = 0.05;
-
+    const minSpeed = 1.10;     // ne s'arrête jamais (mais pas random)
+    const curveStrength = 0.65; // évitement courbe
     const trembleRadius = 90;
     const trembleForce = 0.55;
-
-    const curveStrength = 0.75;
-    const curveNoise = 0.35;
 
     const edgeAvoidDist = 110;
     const edgeAvoidForce = 0.62;
 
-    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+    function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
     function hypot(x,y){ return Math.hypot(x,y); }
 
     function getBounds(){
-      // Zone = arena (pas le body entier)
-      const r = arena.getBoundingClientRect();
-      const w = arena.scrollWidth;
-      const h = arena.scrollHeight;
-      return { w, h };
+      return { w: arena.clientWidth, h: arena.clientHeight };
     }
-
-    function updatePointer(e){
-      // Coordonnées DANS LE DOCUMENT (scroll inclus)
-      pointer.x = e.clientX + window.scrollX;
-      pointer.y = e.clientY + window.scrollY;
-    }
-
-    window.addEventListener("pointermove", updatePointer, { passive:true });
-
-    no.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      updatePointer(e);
-    });
-    no.addEventListener("click", (e) => e.preventDefault());
 
     function step(now){
       const dt = clamp((now - lastT) / 16.666, 0.5, 2.0);
       lastT = now;
 
-      const rect = no.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
+      const B = getBounds();
 
-      const cx = pos.x + w/2;
-      const cy = pos.y + h/2;
+      const rectW = no.offsetWidth || 90;
+      const rectH = no.offsetHeight || 48;
+
+      const cx = pos.x + rectW/2;
+      const cy = pos.y + rectH/2;
 
       const dx = cx - pointer.x;
       const dy = cy - pointer.y;
@@ -311,11 +311,7 @@
 
       let ax = 0, ay = 0;
 
-      if (d > fleeRadius * 1.3){
-        ax += (Math.random() - 0.5) * idleWander;
-        ay += (Math.random() - 0.5) * idleWander;
-      }
-
+      // fuite uniquement quand le curseur est proche
       if (d < fleeRadius){
         const nx = dx / (d || 1);
         const ny = dy / (d || 1);
@@ -326,44 +322,48 @@
         ax += nx * baseAccel * fear;
         ay += ny * baseAccel * fear;
 
+        // trajectoire courbe (perpendiculaire) + sens stable (pas de random)
         const px = -ny;
         const py = nx;
         const side = (vel.x * px + vel.y * py) >= 0 ? 1 : -1;
-        const noise = (Math.random() - 0.5) * curveNoise;
-        const curve = (curveStrength * (0.35 + closeness) + noise) * side;
+        const curve = curveStrength * (0.25 + closeness) * side;
 
         ax += px * curve;
         ay += py * curve;
 
+        // tremblement seulement si très proche (un peu de bruit volontaire)
         if (d < trembleRadius){
           const t = (1 - d / trembleRadius);
-          ax += (Math.random() - 0.5) * trembleForce * (0.4 + 1.2*t);
-          ay += (Math.random() - 0.5) * trembleForce * (0.4 + 1.2*t);
+          ax += (Math.random() - 0.5) * trembleForce * (0.35 + 1.1*t);
+          ay += (Math.random() - 0.5) * trembleForce * (0.35 + 1.1*t);
         }
       }
 
-      const B = getBounds();
+      // évite les bords de l'arena
       const left = pos.x;
       const top = pos.y;
-      const right = (B.w - (pos.x + w));
-      const bottom = (B.h - (pos.y + h));
+      const right = (B.w - (pos.x + rectW));
+      const bottom = (B.h - (pos.y + rectH));
 
-      if (left < edgeAvoidDist)  ax += edgeAvoidForce * (1 - left/edgeAvoidDist);
-      if (right < edgeAvoidDist) ax -= edgeAvoidForce * (1 - right/edgeAvoidDist);
-      if (top < edgeAvoidDist)   ay += edgeAvoidForce * (1 - top/edgeAvoidDist);
-      if (bottom < edgeAvoidDist)ay -= edgeAvoidForce * (1 - bottom/edgeAvoidDist);
+      if (left < edgeAvoidDist)   ax += edgeAvoidForce * (1 - left/edgeAvoidDist);
+      if (right < edgeAvoidDist)  ax -= edgeAvoidForce * (1 - right/edgeAvoidDist);
+      if (top < edgeAvoidDist)    ay += edgeAvoidForce * (1 - top/edgeAvoidDist);
+      if (bottom < edgeAvoidDist) ay -= edgeAvoidForce * (1 - bottom/edgeAvoidDist);
 
+      // intégration
       vel.x = (vel.x + ax * dt) * Math.pow(friction, dt);
       vel.y = (vel.y + ay * dt) * Math.pow(friction, dt);
 
+      // vitesse minimale seulement si on est "en fuite" (proche)
       const sp = hypot(vel.x, vel.y);
-      if (sp < minSpeed){
-        const rx = sp > 0.001 ? vel.x / sp : (Math.random() - 0.5);
-        const ry = sp > 0.001 ? vel.y / sp : (Math.random() - 0.5);
+      if (d < fleeRadius && sp < minSpeed){
+        const rx = sp > 0.001 ? vel.x / sp : (dx / (d || 1));
+        const ry = sp > 0.001 ? vel.y / sp : (dy / (d || 1));
         vel.x += rx * (minSpeed - sp) * 0.25;
         vel.y += ry * (minSpeed - sp) * 0.25;
       }
 
+      // vitesse max
       const sp2 = hypot(vel.x, vel.y);
       if (sp2 > maxSpeed){
         vel.x = (vel.x / sp2) * maxSpeed;
@@ -373,8 +373,8 @@
       pos.x += vel.x * dt;
       pos.y += vel.y * dt;
 
-      pos.x = clamp(pos.x, margin, B.w - w - margin);
-      pos.y = clamp(pos.y, margin, B.h - h - margin);
+      pos.x = clamp(pos.x, margin, B.w - rectW - margin);
+      pos.y = clamp(pos.y, margin, B.h - rectH - margin);
 
       no.style.left = pos.x + "px";
       no.style.top  = pos.y + "px";
@@ -382,9 +382,18 @@
       requestAnimationFrame(step);
     }
 
+    // init pointeur au centre de l'écran (en local arena)
+    (function initPointer(){
+      const ar = arena.getBoundingClientRect();
+      const arenaDocX = ar.left + window.scrollX;
+      const arenaDocY = ar.top  + window.scrollY;
+      pointer.x = (window.innerWidth/2 + window.scrollX) - arenaDocX;
+      pointer.y = (window.innerHeight/2 + window.scrollY) - arenaDocY;
+    })();
+
     requestAnimationFrame(step);
 
-    // ---- Confetti ----
+    // --- Confetti ---
     const canvas = document.getElementById("confetti");
     const ctx = canvas.getContext("2d");
     let confetti = [];
