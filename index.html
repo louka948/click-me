@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Document</title>
+  <title>Valentine</title>
 
   <style>
     :root{
@@ -17,14 +17,23 @@
     }
 
     *{ box-sizing:border-box; }
-    html,body{ height:100%; }
+    html,body{ height:100%; overscroll-behavior:auto; }
     body{
       margin:0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       background: radial-gradient(1200px 700px at 15% 10%, #fff 0%, var(--bg1) 35%, var(--bg2) 100%);
       color:var(--text);
-      overflow:hidden;
+      overflow:auto; /* scroll ON */
       position:relative;
+    }
+
+    /* Grand terrain pour pouvoir scroller et poursuivre */
+    .arena{
+      position:relative;
+      width: 2600px;
+      height: 1700px;
+      min-width: 120vw;
+      min-height: 120vh;
     }
 
     /* Donuts décoratifs (pure CSS) */
@@ -63,13 +72,12 @@
         radial-gradient(circle at 65% 70%, rgba(255,255,255,.9) 0 5%, transparent 6% 100%);
       opacity:.6;
     }
-
     .d1{ left:14px; top:24px; --rot:18deg; }
     .d2{ right:18px; top:46px; --rot:-12deg; width:78px; height:78px; }
     .d3{ left:24px; bottom:32px; --rot:-22deg; width:84px; height:84px; }
     .d4{ right:10px; bottom:18px; --rot:10deg; width:104px; height:104px; }
 
-    /* Petites "sprinkles" en fond */
+    /* Sprinkles en fond */
     .sprinkles{
       position:fixed;
       inset:0;
@@ -85,16 +93,16 @@
     }
 
     .container{
-      position:relative;
-      height:100%;
-      display:grid;
-      place-items:center;
-      padding:22px;
+      position:absolute;
+      left:50%;
+      top:140px;
+      transform:translateX(-50%);
+      width:min(520px, 92vw);
       z-index:2;
+      padding:22px;
     }
 
     .card{
-      width:min(520px, 92vw);
       background:var(--card);
       border-radius:26px;
       padding:26px 18px 28px;
@@ -153,16 +161,17 @@
       color:#fff;
     }
 
-    /* Le bouton "Non" devient un "sprite" volant dans tout l'écran */
+    /* Bouton "Non" : se balade DANS L'ARENA (scrollable) */
     .no{
-      position:fixed;
-      left: 50%;
-      top: 60%;
-      transform: translate(-50%,-50%);
+      position:absolute;
+      left: 900px;
+      top: 600px;
+      transform: translate(0,0);
       background:#ededed;
       color:#333;
       z-index:5;
       touch-action:none;
+      will-change: left, top, transform;
     }
 
     .result{
@@ -212,134 +221,212 @@
 
   <canvas id="confetti"></canvas>
 
-  <div class="container">
-    <div class="card">
-      <div class="icon">🍩💘</div>
+  <div class="arena" id="arena">
+    <div class="container">
+      <div class="card">
+        <div class="icon">🍩💘</div>
+        <h1>Sarah, veux-tu être ma Valentine&nbsp;?</h1>
 
-      <h1>Sarah, veux-tu être ma Valentine&nbsp;?</h1>
+        <div class="buttons" id="buttons">
+          <button class="yes" id="yes">Oui</button>
+        </div>
 
-      <div class="buttons" id="buttons">
-        <button class="yes" id="yes">Oui</button>
-      </div>
+        <div class="hint" id="hint">Le « Non » est en fuite.</div>
 
-      <button class="no" id="no">Non</button>
-
-      <div class="hint" id="hint">Le « Non » essaye de survivre.</div>
-
-      <div class="result" id="result">
-        <div class="yay">VAMOOOOOOOOOS</div>
-        <div class="message">Dieu merci</div>
-        <img src="photo.jpg" class="photo" alt="Photo" />
+        <div class="result" id="result">
+          <div class="yay">VAMOOOOOOOOOS</div>
+          <div class="message">Dieu merci</div>
+          <img src="photo.jpg" class="photo" alt="Photo" />
+        </div>
       </div>
     </div>
+
+    <button class="no" id="no">Non</button>
   </div>
 
   <script>
+    const arena = document.getElementById("arena");
     const no = document.getElementById("no");
     const yes = document.getElementById("yes");
     const result = document.getElementById("result");
     const buttons = document.getElementById("buttons");
     const hint = document.getElementById("hint");
 
-    // Paramètres fuite
-    const margin = 14;          // marge aux bords
-    const fleeRadius = 140;     // distance où le bouton panique
-    const step = 220;           // déplacement quand il fuit (px)
-    const jitter = 40;          // petite variation
-    const maxSpeedBoost = 1.15; // pour éviter qu'il se fasse "piéger" trop facilement
+    // ---- Mouvement "course poursuite" (aucune téléportation) ----
+    let pos = { x: no.offsetLeft, y: no.offsetTop };
+    let vel = { x: 0, y: 0 };
+    let pointer = { x: pos.x, y: pos.y };
+    let lastT = performance.now();
 
-    let pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    // Réglages "options"
+    const margin = 18;
+
+    const fleeRadius = 220;       // distance de déclenchement fuite
+    const fearGain = 1.9;         // peur : accélération augmente quand on approche
+    const baseAccel = 0.35;       // accélération de base
+    const friction = 0.90;        // amortissement (plus bas => plus glissant)
+    const maxSpeed = 9.0;         // vitesse max
+
+    const minSpeed = 1.25;        // vitesse minimale (il ne s’arrête jamais)
+    const idleWander = 0.05;      // drift quand loin
+
+    const trembleRadius = 90;     // tremblement si très proche
+    const trembleForce = 0.55;    // intensité tremblement
+
+    const curveStrength = 0.75;   // trajectoire courbe (évitement)
+    const curveNoise = 0.35;      // variation de la courbe
+
+    const edgeAvoidDist = 120;    // évite les bords du terrain
+    const edgeAvoidForce = 0.60;
 
     function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+    function hypot(x,y){ return Math.hypot(x,y); }
 
-    function moveNoRandom() {
-      const w = no.offsetWidth || 90;
-      const h = no.offsetHeight || 48;
-      const x = Math.random() * (window.innerWidth - w - margin*2) + margin;
-      const y = Math.random() * (window.innerHeight - h - margin*2) + margin;
-      no.style.left = x + "px";
-      no.style.top = y + "px";
-      no.style.transform = "translate(0,0)";
+    function arenaSize(){
+      return {
+        w: arena.scrollWidth,
+        h: arena.scrollHeight
+      };
     }
 
     function getNoRect(){
       return no.getBoundingClientRect();
     }
 
-    function dist(ax, ay, bx, by){
-      const dx = ax - bx, dy = ay - by;
-      return Math.hypot(dx, dy);
+    function updatePointerFromEvent(e){
+      // Coordonnées dans le document (arena)
+      pointer.x = e.clientX + window.scrollX;
+      pointer.y = e.clientY + window.scrollY;
     }
 
-    function fleeFrom(px, py){
-      const r = getNoRect();
-      const cx = r.left + r.width/2;
-      const cy = r.top + r.height/2;
+    window.addEventListener("pointermove", updatePointerFromEvent, { passive:true });
 
-      const d = dist(cx, cy, px, py);
-      if (d > fleeRadius) return;
-
-      // vecteur opposé au pointeur
-      let vx = (cx - px) / (d || 1);
-      let vy = (cy - py) / (d || 1);
-
-      // petite variabilité
-      vx += (Math.random() - 0.5) * 0.25;
-      vy += (Math.random() - 0.5) * 0.25;
-
-      // boost si trop proche
-      const boost = clamp((fleeRadius - d) / fleeRadius, 0.2, 1) * maxSpeedBoost;
-
-      const dx = vx * step * boost + (Math.random() - 0.5) * jitter;
-      const dy = vy * step * boost + (Math.random() - 0.5) * jitter;
-
-      const w = r.width, h = r.height;
-
-      const nx = clamp(r.left + dx, margin, window.innerWidth - w - margin);
-      const ny = clamp(r.top + dy, margin, window.innerHeight - h - margin);
-
-      no.style.left = nx + "px";
-      no.style.top = ny + "px";
-      no.style.transform = "translate(0,0)";
-    }
-
-    // Suivre souris + doigt (Pointer Events)
-    window.addEventListener("pointermove", (e) => {
-      pointer.x = e.clientX;
-      pointer.y = e.clientY;
-      fleeFrom(pointer.x, pointer.y);
-    }, { passive: true });
-
-    // Empêche le "tap" sur mobile de cliquer le bouton
+    // "Panique" si tentative de toucher/click
     no.addEventListener("pointerdown", (e) => {
       e.preventDefault();
-      fleeFrom(e.clientX, e.clientY);
+      updatePointerFromEvent(e);
     });
 
-    // Si le navigateur n'envoie pas de pointermove (rare), fallback
-    no.addEventListener("mouseenter", () => fleeFrom(pointer.x, pointer.y));
     no.addEventListener("click", (e) => {
       e.preventDefault();
-      moveNoRandom();
     });
 
-    // Place initiale
-    moveNoRandom();
-    window.addEventListener("resize", moveNoRandom);
+    function step(now){
+      const dt = clamp((now - lastT) / 16.666, 0.5, 2.0); // normalisation ~60fps
+      lastT = now;
 
-    // Confetti
+      const rect = getNoRect();
+      const w = rect.width;
+      const h = rect.height;
+
+      const cx = pos.x + w/2;
+      const cy = pos.y + h/2;
+
+      const dx = cx - pointer.x;
+      const dy = cy - pointer.y;
+      const d = hypot(dx, dy);
+
+      let ax = 0;
+      let ay = 0;
+
+      // Drift léger quand loin (sinon il peut rester planté au bout d'un moment)
+      if (d > fleeRadius * 1.3){
+        ax += (Math.random() - 0.5) * idleWander;
+        ay += (Math.random() - 0.5) * idleWander;
+      }
+
+      // Fuite + peur (accélération augmente fortement quand on se rapproche)
+      if (d < fleeRadius){
+        const nx = dx / (d || 1);
+        const ny = dy / (d || 1);
+
+        // peur: courbe (1 - d/r)^2
+        const closeness = 1 - (d / fleeRadius);
+        const fear = 1 + fearGain * closeness * closeness;
+
+        ax += nx * baseAccel * fear;
+        ay += ny * baseAccel * fear;
+
+        // Trajectoire courbe: ajout d'une composante perpendiculaire au vecteur fuite
+        // Choix du sens selon vitesse + bruit, pour éviter trajectoire trop prévisible
+        const px = -ny;
+        const py = nx;
+        const side = (vel.x * px + vel.y * py) >= 0 ? 1 : -1;
+        const noise = (Math.random() - 0.5) * curveNoise;
+        const curve = (curveStrength * (0.35 + closeness) + noise) * side;
+
+        ax += px * curve;
+        ay += py * curve;
+
+        // Tremblement si très proche
+        if (d < trembleRadius){
+          const t = (1 - d / trembleRadius);
+          ax += (Math.random() - 0.5) * trembleForce * (0.4 + 1.2*t);
+          ay += (Math.random() - 0.5) * trembleForce * (0.4 + 1.2*t);
+        }
+      }
+
+      // Évitement intelligent des bords de l'arena
+      const S = arenaSize();
+      const left = pos.x;
+      const top = pos.y;
+      const right = (S.w - (pos.x + w));
+      const bottom = (S.h - (pos.y + h));
+
+      if (left < edgeAvoidDist)  ax += edgeAvoidForce * (1 - left/edgeAvoidDist);
+      if (right < edgeAvoidDist) ax -= edgeAvoidForce * (1 - right/edgeAvoidDist);
+      if (top < edgeAvoidDist)   ay += edgeAvoidForce * (1 - top/edgeAvoidDist);
+      if (bottom < edgeAvoidDist)ay -= edgeAvoidForce * (1 - bottom/edgeAvoidDist);
+
+      // Intégration
+      vel.x = (vel.x + ax * dt) * Math.pow(friction, dt);
+      vel.y = (vel.y + ay * dt) * Math.pow(friction, dt);
+
+      // Vitesse minimale
+      const sp = hypot(vel.x, vel.y);
+      if (sp < minSpeed){
+        // pousse dans la direction actuelle, ou random si quasi nul
+        const rx = sp > 0.001 ? vel.x / sp : (Math.random() - 0.5);
+        const ry = sp > 0.001 ? vel.y / sp : (Math.random() - 0.5);
+        vel.x += rx * (minSpeed - sp) * 0.25;
+        vel.y += ry * (minSpeed - sp) * 0.25;
+      }
+
+      // Vitesse max
+      const sp2 = hypot(vel.x, vel.y);
+      if (sp2 > maxSpeed){
+        vel.x = (vel.x / sp2) * maxSpeed;
+        vel.y = (vel.y / sp2) * maxSpeed;
+      }
+
+      pos.x += vel.x * dt;
+      pos.y += vel.y * dt;
+
+      // Clamp position
+      pos.x = clamp(pos.x, margin, S.w - w - margin);
+      pos.y = clamp(pos.y, margin, S.h - h - margin);
+
+      no.style.left = pos.x + "px";
+      no.style.top  = pos.y + "px";
+
+      requestAnimationFrame(step);
+    }
+
+    requestAnimationFrame(step);
+
+    // ---- Confetti ----
     const canvas = document.getElementById("confetti");
     const ctx = canvas.getContext("2d");
     let confetti = [];
 
-    function resizeCanvas() {
+    function resizeCanvas(){
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
 
-    function startConfetti() {
+    function startConfetti(){
       canvas.style.display = "block";
       confetti = Array.from({ length: 190 }, () => ({
         x: Math.random() * canvas.width,
@@ -354,8 +441,8 @@
       }));
 
       let t = 0;
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      function draw(){
+        ctx.clearRect(0,0,canvas.width,canvas.height);
         confetti.forEach(p => {
           p.x += p.vx;
           p.y += p.vy;
@@ -368,12 +455,11 @@
           ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
           ctx.restore();
 
-          if (p.y > canvas.height + 30) {
+          if (p.y > canvas.height + 30){
             p.y = -30;
             p.x = Math.random() * canvas.width;
           }
         });
-
         t++;
         if (t < 220) requestAnimationFrame(draw);
         else canvas.style.display = "none";
